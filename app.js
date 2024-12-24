@@ -4,7 +4,6 @@ const cors = require('cors');
 const app = express();
 require('dotenv').config();
 
-
 app.use(cors());
 app.use(bodyParser.json());
 
@@ -14,14 +13,18 @@ const matchRoutes = require('./routes/matches');
 const prizeRoutes = require('./routes/prizes');
 const playerStats = require('./routes/player-stats');
 
-// Sử dụng routes
+// Use routes
 app.use('/team', teamRoutes);
 app.use('/match', matchRoutes);
 app.use('/prize', prizeRoutes);
 app.use('/player-stats', playerStats);
 
-// Khởi chạy server
-const PORT = process.env.PORT || 3000;
-app.listen(PORT, () => {
-  console.log(`Server is running on http://localhost:${PORT}`);
+// Export the express app as a Vercel function
+// Export the app as a serverless function
+// Define a simple GET route
+app.get('/', (req, res) => {
+  res.send("Hello from football-league-2024-backend!");
 });
+
+// Export the app as a serverless function
+module.exports = app;
