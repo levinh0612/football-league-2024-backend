@@ -1,0 +1,30 @@
+{
+  "name": "football-league-2024-backend",
+  "version": "1.0.0",
+  "description": "Backend for the Football League 2024 project",
+  "main": "app.js",
+  "scripts": {
+    "start": "node app.js",
+    "dev": "nodemon app.js",
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "keywords": [
+    "football",
+    "league",
+    "backend",
+    "nodejs"
+  ],
+  "author": "Your Name",
+  "license": "ISC",
+  "type": "commonjs",
+  "dependencies": {
+    "body-parser": "^1.20.3",
+    "cors": "^2.8.5",
+    "dotenv": "^16.3.1",
+    "express": "^4.21.2",
+    "pg": "^8.13.1"
+  },
+  "devDependencies": {
+    "nodemon": "^2.0.22"
+  }
+}
