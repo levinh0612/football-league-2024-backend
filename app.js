@@ -27,4 +27,7 @@ app.get('/', (req, res) => {
 });
 
 // Export the app as a serverless function
-module.exports = app;
+// Export the express app as a Vercel function
+module.exports = (req, res) => {
+  app(req, res);
+};
