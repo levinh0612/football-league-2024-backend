@@ -77,7 +77,7 @@ exports.getPlayersByTeam = async (req, res) => {
 
   try {
     // Write a raw SQL query to get players by team_id
-    const query = 'SELECT * FROM players WHERE team_id = $1';
+    const query = 'SELECT * FROM players WHERE team_id = $1 ORDER BY jersey_number asc';
     const { rows } = await pool.query(query, [teamId]); // $1 is a placeholder for teamId
 
     if (rows.length > 0) {
