@@ -6,38 +6,68 @@ exports.getLeaderboard = async (req, res) => {
     // Get leaderboard data
     const leaderboardResult = await pool.query(`
       SELECT 
-        id AS team_id,
-        name AS team_name,
-        played,
-        wins,
-        draws,
-        losses,
-        goals_for,
-        goals_against,
-        (goals_for - goals_against) AS goal_difference,
-        points
-      FROM teams
+        t.id AS team_id,
+        t.name AS team_name,
+        COUNT(m.id) AS played,
+        SUM(CASE WHEN m.winner_id = t.id THEN 1 ELSE 0 END) AS wins,
+        SUM(CASE WHEN m.winner_id IS NULL THEN 1 ELSE 0 END) AS draws,
+        SUM(CASE WHEN m.winner_id != t.id AND m.winner_id IS NOT NULL THEN 1 ELSE 0 END) AS losses,
+        COALESCE((
+          SELECT SUM(ps.goals)
+          FROM player_stats ps
+          JOIN players p ON ps.player_id = p.id
+          WHERE p.team_id = t.id
+        ), 0) AS goals_for,
+        COALESCE((
+          SELECT SUM(ps.goals)
+          FROM player_stats ps
+          JOIN players p ON ps.player_id = p.id
+          WHERE p.team_id != t.id AND ps.match_id IN (
+            SELECT id FROM matches WHERE home_team_id = t.id OR away_team_id = t.id
+          )
+        ), 0) AS goals_against,
+        (COALESCE((
+          SELECT SUM(ps.goals)
+          FROM player_stats ps
+          JOIN players p ON ps.player_id = p.id
+          WHERE p.team_id = t.id
+        ), 0) - COALESCE((
+          SELECT SUM(ps.goals)
+          FROM player_stats ps
+          JOIN players p ON ps.player_id = p.id
+          WHERE p.team_id != t.id AND ps.match_id IN (
+            SELECT id FROM matches WHERE home_team_id = t.id OR away_team_id = t.id
+          )
+        ), 0)) AS goal_difference,
+        (SUM(CASE WHEN m.winner_id = t.id THEN 3 ELSE 0 END) +
+         SUM(CASE WHEN m.winner_id IS NULL THEN 1 ELSE 0 END)) AS points
+      FROM teams t
+      LEFT JOIN matches m
+      ON t.id = m.home_team_id OR t.id = m.away_team_id
+      WHERE m.date <= NOW()  -- Consider only matches that have already been played
+      GROUP BY t.id
       ORDER BY points DESC, goal_difference DESC;
     `);
-    
+
     // Get recent results for each team
     const recentResultsResult = await pool.query(`
       SELECT
         team_id,
         array_agg(
             CASE
-                WHEN team_id = m.team_id AND m.home_score > m.away_score THEN 'W'
-                WHEN team_id = m.team_id AND m.away_score > m.home_score THEN 'L'
-                WHEN m.home_score = m.away_score THEN 'D'
+                WHEN m.winner_id = team_id THEN 'W'
+                WHEN m.winner_id IS NULL THEN 'D'
                 ELSE 'L'
             END ORDER BY m.date DESC
         ) AS recent_results
       FROM (
-          SELECT home_team_id AS team_id, home_score, away_score, date
-          FROM matches where away_score > 0 or home_score > 0
+          SELECT home_team_id AS team_id, winner_id, date
+          FROM matches
+          WHERE date <= NOW()
           UNION ALL
-          SELECT away_team_id AS team_id, away_score AS home_score, home_score AS away_score, date
-          FROM matches where away_score > 0 or home_score > 0
+          SELECT away_team_id AS team_id, winner_id, date
+          FROM matches
+          WHERE date <= NOW()
       ) AS m
       GROUP BY team_id
       ORDER BY team_id;
@@ -48,27 +78,27 @@ exports.getLeaderboard = async (req, res) => {
     const recentResults = recentResultsResult.rows;
 
     // Combine the data
-    const response = leaderboard.map(team => {
+    const response = leaderboard.map((team, index) => {
       const teamRecentResults = recentResults.find(result => result.team_id === team.team_id);
       return {
-        rank: leaderboard.indexOf(team) + 1,
+        rank: index + 1,
         teamName: team.team_name,
-        matchesPlayed: team.played,
-        wins: team.wins,
-        draws: team.draws,
-        losses: team.losses,
-        goalsFor: team.goals_for,
-        goalsAgainst: team.goals_against,
-        goalDifference: team.goal_difference,
-        points: team.points,
-        recentResults: teamRecentResults ? teamRecentResults.recent_results.slice(0, 5) : []  // Get last 5 results
+        matchesPlayed: parseInt(team.played, 10),
+        wins: parseInt(team.wins, 10),
+        draws: parseInt(team.draws, 10),
+        losses: parseInt(team.losses, 10),
+        goalsFor: parseInt(team.goals_for, 10),
+        goalsAgainst: parseInt(team.goals_against, 10),
+        goalDifference: parseInt(team.goal_difference, 10),
+        points: parseInt(team.points, 10),
+        recentResults: teamRecentResults ? teamRecentResults.recent_results.slice(0, 5) : [] // Get last 5 results
       };
     });
 
     res.status(200).json(response);
   } catch (err) {
-    console.error(err);
-    res.status(500).json({ message: 'Error getting leaderboard' });
+    console.error("Error fetching leaderboard:", err);
+    res.status(500).json({ message: "Error getting leaderboard" });
   }
 };
 

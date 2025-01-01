@@ -47,21 +47,40 @@ exports.createMatch = async (req, res) => {
 };
 
 exports.updateMatchDetails = async (req, res) => {
-  const { id } = req.params;
+  const { id } = req.params; // Match ID
   const {
     isDefined,
     homeScore: home_score,
     awayScore: away_score,
     events,
-    homeTeamId: home_team_id,
-    awayTeamId: away_team_id,
   } = req.body;
 
   try {
     // Begin a transaction
     await pool.query("BEGIN");
+    console.log(`Transaction started for match_id=${id}`);
 
-    // Step 1: Update the match score
+    // Step 1: Retrieve home_team_id and away_team_id from the matches table
+    const matchQuery = `
+      SELECT home_team_id, away_team_id 
+      FROM matches 
+      WHERE id = $1;
+    `;
+    const matchResult = await pool.query(matchQuery, [id]);
+
+    if (matchResult.rows.length === 0) {
+      console.error(`Match with id=${id} not found`);
+      await pool.query("ROLLBACK");
+      return res.status(404).json({ message: "Match not found" });
+    }
+
+    const { home_team_id, away_team_id } = matchResult.rows[0];
+
+    console.log(
+      `Retrieved from matches: home_team_id=${home_team_id}, away_team_id=${away_team_id}`
+    );
+
+    // Step 2: Update the match score
     await pool.query(
       `
       UPDATE matches 
@@ -70,9 +89,13 @@ exports.updateMatchDetails = async (req, res) => {
     `,
       [home_score, away_score, id]
     );
+    console.log(`Match score updated: home_score=${home_score}, away_score=${away_score}`);
 
+    // Step 3: Adjust player stats if defined
     if (isDefined) {
-      // Step 2a: Adjust player stats before processing events
+      console.log("Adjusting player stats...");
+      
+      // Retrieve existing player stats for the match
       const statsQuery = `
         SELECT player_id, goals, yellow_cards, red_cards 
         FROM player_stats 
@@ -81,7 +104,7 @@ exports.updateMatchDetails = async (req, res) => {
       const statsResult = await pool.query(statsQuery, [id]);
 
       for (const stat of statsResult.rows) {
-        // Subtract existing stats from the players table
+        // Subtract stats from the players table
         await pool.query(
           `
           UPDATE players 
@@ -94,22 +117,17 @@ exports.updateMatchDetails = async (req, res) => {
           [stat.goals, stat.yellow_cards, stat.red_cards, stat.player_id]
         );
       }
+      console.log(`Existing player stats adjusted for match_id=${id}`);
 
-      // Step 2b: Remove old player stats for this match
-      const deleteResult = await pool.query(`
+      // Remove old player stats for the match
+      await pool.query(`
         DELETE FROM player_stats 
         WHERE match_id = $1;
       `, [id]);
-
-      // Reset sequence to avoid duplicate ID issues
-      await pool.query(
-        `
-        SELECT setval('player_stats_id_seq', (SELECT MAX(id) FROM player_stats) + 1);
-      `
-      );
+      console.log(`Old player stats removed for match_id=${id}`);
     }
 
-    // Step 3: Process and insert events
+    // Step 4: Process events
     for (const { homePlayer, awayPlayer, eventType, eventCount } of events) {
       const parsedEventCount = parseInt(eventCount, 10) || 0;
 
@@ -171,54 +189,30 @@ exports.updateMatchDetails = async (req, res) => {
       if (homePlayer) await processEvent(homePlayer);
       if (awayPlayer) await processEvent(awayPlayer);
     }
+    console.log("Events processed successfully");
 
-    // Step 4: Update team stats
-    const updateTeamStats = async (teamId, goalsFor, goalsAgainst, result) => {
-      const columns = {
-        win: "wins",
-        loss: "losses",
-        draw: "draws",
-      };
-
-      const resultColumn = columns[result];
-
-      await pool.query(
-        `
-        UPDATE teams
-        SET 
-          ${resultColumn} = ${resultColumn} + 1, 
-          goals_for = goals_for + $1, 
-          goals_against = goals_against + $2, 
-          points = points + $3
-        WHERE id = $4;
-      `,
-        [
-          goalsFor,
-          goalsAgainst,
-          result === "win" ? 3 : result === "draw" ? 1 : 0,
-          teamId,
-        ]
-      );
-    };
-
-    let homeResult, awayResult;
+    // Step 5: Determine winner_id and update matches
+    let winner_id = null;
 
     if (home_score > away_score) {
-      homeResult = "win";
-      awayResult = "loss";
+      winner_id = home_team_id;
     } else if (home_score < away_score) {
-      homeResult = "loss";
-      awayResult = "win";
-    } else {
-      homeResult = "draw";
-      awayResult = "draw";
+      winner_id = away_team_id;
     }
 
-    await updateTeamStats(home_team_id, home_score, away_score, homeResult);
-    await updateTeamStats(away_team_id, away_score, home_score, awayResult);
+    await pool.query(
+      `
+      UPDATE matches 
+      SET winner_id = $1 
+      WHERE id = $2;
+    `,
+      [winner_id, id]
+    );
+    console.log(`Winner updated in matches: winner_id=${winner_id}`);
 
     // Commit the transaction
     await pool.query("COMMIT");
+    console.log(`Transaction committed for match_id=${id}`);
 
     res.status(200).json({ message: "Match details updated successfully." });
   } catch (error) {
