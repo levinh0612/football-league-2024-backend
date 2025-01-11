@@ -110,7 +110,16 @@ exports.getResult = async (req, res) => {
       topGoals: topGoalsResult.rows[0], // The player with the highest goals
       redCards: redCardsResult.rows, // All players with red cards
       yellowCards: yellowCardsResult.rows, // All players with yellow cards
-      prizes: prizesResult.rows, // All prizes
+      prizes: prizesResult.rows.map(item => {
+        if (item?.tag === 'topGoals') {
+          return {
+            ...item,
+            name: topGoalPlayer?.name
+          }
+        } else {
+          return item;
+        }
+      }), // All prizes
       bestPlayerPrize: bestPlayerPrize, // The "Cầu thủ xuất sắc (Vua phá lưới)" prize (updated if needed)
     });
   } catch (err) {
