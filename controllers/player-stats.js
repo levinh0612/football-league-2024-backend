@@ -73,11 +73,39 @@ exports.getResult = async (req, res) => {
     `;
     const yellowCardsResult = await pool.query(yellowCardsQuery);
 
+    // Get prize information, joining teams and players
+    const prizesQuery = `
+      SELECT 
+          p.name AS prize_name, 
+          TO_CHAR(p.value, 'FM9,999,999,999') || ' VNĐ' AS value, 
+          p.team_id, 
+          t.name AS team_name, 
+          p.player_id, 
+          pl.name AS player_name, 
+          p.typename AS tag
+        FROM prizes p
+        LEFT JOIN teams t ON p.team_id = t.id
+        LEFT JOIN players pl ON p.player_id = pl.id
+        ORDER BY tag ASC;
+      ;
+    `;
+    const prizesResult = await pool.query(prizesQuery);
+
+    // Handle "Cầu thủ xuất sắc (Vua phá lưới)" prize
+    const bestPlayerPrize = prizesResult.rows.find(prize => prize.prize_name === 'Cầu thủ xuất sắc (Vua phá lưới)');
+
+    if (bestPlayerPrize && !bestPlayerPrize.player_id) {
+      // If no player_id is provided, assign the player with the most goals
+      bestPlayerPrize.player_id = topGoalsResult.rows[0].name;
+    }
+
     // Sending the result as response
     res.status(200).json({
       topGoals: topGoalsResult.rows[0], // The player with the highest goals
       redCards: redCardsResult.rows, // All players with red cards
       yellowCards: yellowCardsResult.rows, // All players with yellow cards
+      prizes: prizesResult.rows, // All prizes
+      bestPlayerPrize: bestPlayerPrize, // The "Cầu thủ xuất sắc (Vua phá lưới)" prize (updated if needed)
     });
   } catch (err) {
     console.error(err);
