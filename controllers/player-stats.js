@@ -98,10 +98,10 @@ exports.getResult = async (req, res) => {
       bestPlayerPrize.player_id = topGoalsResult.rows[0].name;
       bestPlayerPrize.name = topGoalsResult.rows[0].name;
     }
-
+    let topGoalPlayer = null;
     // Adding the goal count to the player_name of topGoals
     if (topGoalsResult.rows.length > 0) {
-      const topGoalPlayer = topGoalsResult.rows[0];
+      topGoalPlayer = topGoalsResult.rows[0];
       topGoalPlayer.name = `${topGoalPlayer.name} (${topGoalPlayer.goals} bàn)`; // Adding goal count to player name
     }
 
