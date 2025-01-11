@@ -87,7 +87,6 @@ exports.getResult = async (req, res) => {
         LEFT JOIN teams t ON p.team_id = t.id
         LEFT JOIN players pl ON p.player_id = pl.id
         ORDER BY tag ASC;
-      ;
     `;
     const prizesResult = await pool.query(prizesQuery);
 
@@ -97,6 +96,12 @@ exports.getResult = async (req, res) => {
     if (bestPlayerPrize && !bestPlayerPrize.player_id) {
       // If no player_id is provided, assign the player with the most goals
       bestPlayerPrize.player_id = topGoalsResult.rows[0].name;
+    }
+
+    // Adding the goal count to the player_name of topGoals
+    if (topGoalsResult.rows.length > 0) {
+      const topGoalPlayer = topGoalsResult.rows[0];
+      topGoalPlayer.name = `${topGoalPlayer.name} (${topGoalPlayer.goals} bàn)`; // Adding goal count to player name
     }
 
     // Sending the result as response
