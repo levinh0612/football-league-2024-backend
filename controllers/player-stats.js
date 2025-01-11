@@ -66,8 +66,9 @@ exports.getResult = async (req, res) => {
 
     // Players with yellow cards
     const yellowCardsQuery = `
-      SELECT name, yellow_cards 
-      FROM players 
+      SELECT p.name, p.yellow_cards, t.id as team_id, t.name as team_name
+      FROM players p
+        JOIN teams t on t.id = p.team_id
       WHERE yellow_cards > 0
     `;
     const yellowCardsResult = await pool.query(yellowCardsQuery);
