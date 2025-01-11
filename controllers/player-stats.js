@@ -114,7 +114,7 @@ exports.getResult = async (req, res) => {
         if (item?.tag === 'topGoals') {
           return {
             ...item,
-            name: topGoalPlayer?.name
+            player_name: topGoalPlayer?.name
           }
         } else {
           return item;
